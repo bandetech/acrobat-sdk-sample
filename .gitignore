@@ -1,0 +1,24 @@
+# --------------------------------------------------------------------------
+# Acrobat SDK sample sources must NOT be committed to this repository.
+# BasicPlugin.cpp / BasicPluginInit.cpp come from the Adobe Acrobat SDK
+# and cannot be redistributed. Copy them locally per README.md.
+# --------------------------------------------------------------------------
+src/BasicPlugin.cpp
+src/BasicPluginInit.cpp
+src/PIMain.c
+
+# CMake build directories
+build/
+build-*/
+out/
+CMakeUserPresets.json
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+.vs/
+*.xcuserstate
+xcuserdata/
