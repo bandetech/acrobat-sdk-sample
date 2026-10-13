@@ -7,7 +7,7 @@ Adobe Acrobat のプラグインを **CMake** でビルドするサンプルで�
 | Windows | `MyCustomPlugin.api` | DLL（拡張子を `.api` に変更） |
 | macOS | `MyCustomPlugin.acroplugin` | バンドル（Mach-O の `bundle` 形式） |
 
-SDK のヘッダは [acrobat-sdk-cmake](https://github.com/bandetech/acrobat-sdk-cmake) から `Acrobat_SDK` ターゲットとして受け取ります。
+SDK のヘッダは、別リポジトリ **acrobat-sdk-cmake** が提供する `Acrobat_SDK` ターゲットから受け取ります。
 
 ## このリポジトリに SDK のソースは含まれていません
 
@@ -23,13 +23,21 @@ Adobe の Developer サイトから Acrobat SDK を入手します。配布ペ�
 
 ## 2. SDK パッケージを用意する
 
-[acrobat-sdk-cmake](https://github.com/bandetech/acrobat-sdk-cmake) を用意し、その `Headers/API` と `Headers/SDK` に SDK のヘッダを配置します。手順は同リポジトリの README を参照してください。
+**acrobat-sdk-cmake** をクローンし、その `Headers/API` と `Headers/SDK` に SDK のヘッダを配置します。手順は同リポジトリの README を参照してください。
 
-このリポジトリの `CMakeLists.txt` は `FetchContent` で取得する設定になっています。ヘッダを手元に置いたクローンを使いたい場合は、`FetchContent_Declare` / `FetchContent_MakeAvailable` の2ブロックを次のように置き換えてください。
+配置できたら、そのディレクトリを `ACROBAT_SDK_DIR` で指定します。
 
-```cmake
-add_subdirectory(/path/to/acrobat-sdk-cmake acrobat-sdk-cmake EXCLUDE_FROM_ALL)
+```bash
+cmake -B build -DACROBAT_SDK_DIR=/path/to/acrobat-sdk-cmake
 ```
+
+`ACROBAT_SDK_DIR` はキャッシュ変数なので、一度 configure すれば以降のビルドで指定は不要です。
+
+> **なぜ `FetchContent` ではないのか**
+> acrobat-sdk-cmake は SDK のヘッダを含んでいません（再配布できないため）。そのため `FetchContent` で取得しても `Headers/` は空で、`PIHeaders.h` が見つからずビルドできません。ヘッダを置いたローカルのクローンを指す必要があります。
+> なお `PIMain.c` も SDK のヘッダと一緒に配布されているため、`ACROBAT_SDK_DIR` 配下の `Headers/API/PIMain.c` をビルド対象にしています。
+
+`ACROBAT_SDK_DIR` を指定しなかった場合、ヘッダが未配置の場合は、それぞれ configure 時に理由を示して停止します。
 
 ## 3. プラグインのソースをコピーする
 
@@ -77,7 +85,7 @@ src/BasicPluginInit.cpp: c program text, ASCII text
 ### macOS（コマンドライン）
 
 ```bash
-cmake -B build
+cmake -B build -DACROBAT_SDK_DIR=/path/to/acrobat-sdk-cmake
 cmake --build build
 # → build/MyCustomPlugin.acroplugin
 ```
@@ -85,7 +93,7 @@ cmake --build build
 ### macOS（Xcode プロジェクトを生成する）
 
 ```bash
-cmake -B build-xcode -G Xcode
+cmake -B build-xcode -G Xcode -DACROBAT_SDK_DIR=/path/to/acrobat-sdk-cmake
 cmake --build build-xcode --config Release
 # → build-xcode/Release/MyCustomPlugin.acroplugin
 ```
@@ -100,7 +108,8 @@ xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer dire
 そのコマンドの間だけ Xcode を使う場合（マシン全体の設定を変えません）:
 
 ```bash
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer cmake -B build-xcode -G Xcode
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  cmake -B build-xcode -G Xcode -DACROBAT_SDK_DIR=/path/to/acrobat-sdk-cmake
 ```
 
 現在の向き先は `xcode-select -p` で確認できます。
@@ -108,7 +117,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer cmake -B build-xcode -G
 ### Windows
 
 ```bat
-cmake -B build
+cmake -B build -DACROBAT_SDK_DIR=C:/path/to/acrobat-sdk-cmake
 cmake --build build --config Release
 ```
 
@@ -188,6 +197,21 @@ macOS で「読み込まれているのにメニューが出ない」場合、�
 | `PIHandshake` 以降で失敗 | プラグイン側の初期化処理（メニュー作成など） |
 
 ログの仕込み方（`os_log` を使うマクロ、`__attribute__((constructor))` での `dlopen` 検知、`log stream` での監視）は、下の関連記事の macOS 編で詳しく書いています。
+
+## 動作確認
+
+このリポジトリの内容（クローン直後の状態）から、上の手順どおりに SDK のヘッダとソースを配置してビルドできることを確認しています。
+
+| 項目 | 結果 |
+|---|---|
+| 環境 | macOS 26.5.1（Apple Silicon）／ AppleClang 21.0.0 ／ CMake 4.4.3 |
+| 成果物 | `MyCustomPlugin.acroplugin/Contents/{Info.plist,MacOS/MyCustomPlugin}` |
+| アーキテクチャ | `x86_64 arm64`（ユニバーサル） |
+| 最低 OS | `minos 12.0` |
+| エントリポイント | `nm -gU` に `_AcroPluginMain` が `T` で出る |
+| Info.plist | `MainEntryPointV2 => AcroPluginMain` / `CFBundlePackageType => XTND` |
+
+Windows 側のビルドはこの確認に含まれていません（上記の `/EXPORT:PlugInMain` の注意も参照してください）。Acrobat への実ロードとメニュー表示も、この確認には含まれていません。
 
 ## ライセンスと再配布について
 

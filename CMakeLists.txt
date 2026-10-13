@@ -10,20 +10,51 @@ project(MyCustomPlugin VERSION 1.0.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Fetch Acrobat SDK library
-include(FetchContent)
-FetchContent_Declare(
-    AcrobatSDK
-    GIT_REPOSITORY https://github.com/bandetech/acrobat-sdk-cmake
-    GIT_TAG main
+# ---------------------------------------------------------------------------
+# Acrobat SDK CMake package (acrobat-sdk-cmake)
+#
+# That package deliberately ships NO SDK headers: they are Adobe's
+# distribution and cannot be redistributed. So the setup is:
+#
+#   1. clone acrobat-sdk-cmake
+#   2. copy the Acrobat SDK's headers into its Headers/API and Headers/SDK
+#   3. point ACROBAT_SDK_DIR at that checkout
+#
+# See README.md for the full procedure.
+# ---------------------------------------------------------------------------
+set(ACROBAT_SDK_DIR "" CACHE PATH
+    "Path to a local acrobat-sdk-cmake checkout whose Headers/ is already populated"
 )
-FetchContent_MakeAvailable(AcrobatSDK)
+
+if(NOT ACROBAT_SDK_DIR)
+    message(FATAL_ERROR
+        "ACROBAT_SDK_DIR is not set.\n"
+        "Clone acrobat-sdk-cmake, copy the Acrobat SDK headers into its "
+        "Headers/API and Headers/SDK directories, then configure with:\n"
+        "  cmake -B build -DACROBAT_SDK_DIR=/path/to/acrobat-sdk-cmake\n"
+        "See README.md for details."
+    )
+endif()
+
+if(NOT EXISTS "${ACROBAT_SDK_DIR}/Headers/API/PIMain.c")
+    message(FATAL_ERROR
+        "ACROBAT_SDK_DIR is set to '${ACROBAT_SDK_DIR}', but "
+        "Headers/API/PIMain.c was not found there.\n"
+        "The Acrobat SDK headers still need to be copied into that checkout "
+        "(Headers/API and Headers/SDK). See README.md."
+    )
+endif()
+
+add_subdirectory("${ACROBAT_SDK_DIR}" acrobat-sdk-cmake EXCLUDE_FROM_ALL)
+
+# PIMain.c ships with the SDK headers, so it lives in the package checkout.
+set(ACROBAT_SDK_PIMAIN "${ACROBAT_SDK_DIR}/Headers/API/PIMain.c")
 
 if(WIN32)
     add_library(MyCustomPlugin SHARED
         src/BasicPlugin.cpp
         src/BasicPluginInit.cpp
-        ${acrobatsdk_SOURCE_DIR}/Headers/API/PIMain.c
+        ${ACROBAT_SDK_PIMAIN}
     )
 
     # change the output file suffix for the plugin to .api
@@ -41,13 +72,13 @@ elseif(APPLE)
     set_source_files_properties(
         src/BasicPlugin.cpp
         src/BasicPluginInit.cpp
-        ${acrobatsdk_SOURCE_DIR}/Headers/API/PIMain.c
+        ${ACROBAT_SDK_PIMAIN}
         PROPERTIES LANGUAGE OBJCXX
     )
     add_library(MyCustomPlugin MODULE
         src/BasicPlugin.cpp
         src/BasicPluginInit.cpp
-        ${acrobatsdk_SOURCE_DIR}/Headers/API/PIMain.c
+        ${ACROBAT_SDK_PIMAIN}
     )
     # Sources do not include PIHeaders.h on Mac; it is supplied as a prefix header
     target_precompile_headers(MyCustomPlugin PRIVATE <Carbon/Carbon.h> <PIHeaders.h>)
@@ -86,7 +117,7 @@ if(APPLE)
     target_link_libraries(MyCustomPlugin PRIVATE "${COREFOUNDATION_FRAMEWORK}")
 endif()
 
-# For checking the include directories of Acrobat_SDK
+# For checking the include directories carried by Acrobat_SDK
 get_target_property(
     ACRO_INCLUDES
     Acrobat_SDK
